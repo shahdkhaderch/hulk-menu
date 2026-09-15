@@ -106,7 +106,13 @@
   .combo-chip{
     width:100%; display:flex; align-items:center; justify-content:space-between;
     background:var(--purple-tint); border-radius:12px; padding:9px 14px;
+    cursor:pointer; transition:.15s; border:1px solid transparent;
   }
+  .combo-chip:active{ transform:scale(0.97); }
+  .combo-chip:hover{ border-color:var(--purple); }
+  .combo-chip.active{ background:linear-gradient(120deg, var(--purple), var(--purple-deep)); border-color:transparent; }
+  .combo-chip.active .combo-label{ color:#fff; }
+  .combo-chip.active .combo-price{ background:rgba(255,255,255,.25); }
   .combo-chip .combo-label{ font-size:12px; font-weight:700; color:var(--purple-deep); }
   .combo-chip .combo-price{ background:var(--purple-deep); color:#fff; font-family:'Cairo',sans-serif; font-weight:800; border-radius:20px; padding:3px 12px; font-size:12px; white-space:nowrap; }
 
@@ -158,6 +164,9 @@
   .order-type-btn{ flex:1; text-align:center; padding:12px; border-radius:14px; background:var(--purple-tint); border:1px solid var(--line); cursor:pointer; font-family:'Cairo',sans-serif; font-weight:800; font-size:13.5px; color:var(--purple-deep); transition:.2s; }
   .order-type-btn.active{ background:linear-gradient(120deg, var(--purple), var(--purple-deep)); color:#fff; border-color:transparent; box-shadow:0 8px 18px rgba(107,47,160,.3); }
   .order-extra-input{ width:100%; padding:13px 16px; border-radius:14px; border:1px solid var(--line); background:var(--white); font-family:'Tajawal',sans-serif; font-size:14px; color:var(--ink); margin-bottom:16px; box-sizing:border-box; }
+  .order-notes-input{ width:100%; padding:13px 16px; border-radius:14px; border:1px solid var(--line); background:var(--white); font-family:'Tajawal',sans-serif; font-size:13.5px; color:var(--ink); margin-bottom:16px; box-sizing:border-box; resize:none; line-height:1.6; }
+  .order-notes-input:focus{ outline:none; border-color:var(--purple); }
+  .order-notes-input::placeholder{ color:var(--muted); }
   .order-extra-input:focus{ outline:none; border-color:var(--purple); }
   .order-extra-input::placeholder{ color:var(--muted); }
   .cart-total-bar{ position:sticky; bottom:0; background:var(--white); border-top:1px solid var(--line); padding:16px 22px 20px; display:flex; align-items:center; gap:14px; margin:0 -22px; }
@@ -374,6 +383,7 @@
         <div class="order-type-btn" data-type="takeaway" onclick="setOrderType('takeaway')">🥡 سفري</div>
       </div>
       <div id="orderTypeExtra"></div>
+      <textarea id="orderNotesInput" class="order-notes-input" placeholder="ملاحظات على الطلب (اختياري)... مثال: بدون بصل، صوص إضافي" rows="2"></textarea>
       <div id="cartList"></div>
     </div>
   </section>
@@ -483,7 +493,11 @@ function comboIcon(){
     <path d="M17.6 16.2h10.6a1.1 1.1 0 0 0 1.1-1"/>
   </svg>`;
 }
-function comboChip(){ return `<div class="combo-chip"><span class="combo-label">مع كولا وبطاطا</span><span class="combo-price">7₪</span></div>`; }
+let selectedCombo = false;
+let selectedAddons = [];
+function comboChip(){
+  return `<div class="combo-chip ${selectedCombo?'active':''}" onclick="toggleCombo()"><span class="combo-label">${selectedCombo?'✓ ':''}مع كولا وبطاطا</span><span class="combo-price">7₪</span></div>`;
+}
 
 /* ============ DATA ============ */
 const CATS = [
@@ -672,8 +686,29 @@ const ADDONS = {
 function addonRow(catKey){
   const list = ADDONS[catKey];
   if(!list) return '';
-  return list.map(a=>`
-    <div class="combo-chip"><span class="combo-label">${a.label}</span><span class="combo-price">${a.price}₪</span></div>`).join('');
+  return list.map((a,i)=>{
+    const active = selectedAddons.includes(i);
+    return `<div class="combo-chip ${active?'active':''}" onclick="toggleAddon(${i})"><span class="combo-label">${active?'✓ ':''}${a.label}</span><span class="combo-price">${a.price}₪</span></div>`;
+  }).join('');
+}
+function toggleCombo(){ selectedCombo = !selectedCombo; renderDetailCombo(); updateDetailPriceDisplay(); }
+function toggleAddon(i){
+  const pos = selectedAddons.indexOf(i);
+  if(pos>=0) selectedAddons.splice(pos,1); else selectedAddons.push(i);
+  renderDetailCombo();
+  updateDetailPriceDisplay();
+}
+function renderDetailCombo(){
+  const it = currentItem;
+  document.getElementById('detailCombo').innerHTML = (it.combo ? comboChip() : '') + (it.tiers ? addonRow(currentCatKey) : '');
+}
+function updateDetailPriceDisplay(){
+  const it = currentItem;
+  if(!it.tiers) return;
+  let price = it.tiers[currentWeight];
+  if(selectedCombo) price += 7;
+  selectedAddons.forEach(i=>{ price += ADDONS[currentCatKey][i].price; });
+  document.getElementById('detailPrice').textContent = price + '₪';
 }
 
 function openDetail(item, catKey){
@@ -696,7 +731,9 @@ function openDetail(item, catKey){
   document.getElementById('detailBadgeRow').innerHTML = item.featured && item.tag ? `<span class="detail-badge">${item.tag}</span>` : '';
   document.getElementById('detailName').textContent = item.name;
   document.getElementById('detailDesc').textContent = item.desc||'';
-  document.getElementById('detailCombo').innerHTML = (item.combo ? comboChip() : '') + (hasTiers ? addonRow(catKey) : '');
+  selectedCombo = false;
+  selectedAddons = [];
+  renderDetailCombo();
 
   document.getElementById('sizeSection').style.display = hasTiers ? 'block' : 'none';
   document.getElementById('weightSection').style.display = hasTiers ? 'block' : 'none';
@@ -752,6 +789,7 @@ function renderDetail(animateWeight){
   }
 
   document.getElementById('detailPrice').textContent = price + '₪';
+  updateDetailPriceDisplay();
   document.querySelectorAll('.size-pill').forEach(b=> b.classList.toggle('active', b.dataset.size===currentSize));
 
   const weightsAscending = availableWeights(it.tiers,currentSize).slice().sort((a,b)=>b-a);
@@ -799,9 +837,19 @@ function changeDetailQty(delta){
 function addCurrentToCart(){
   const it = currentItem;
   if(it.tiers){
-    const price = it.tiers[currentWeight];
+    let price = it.tiers[currentWeight];
     const sizeText = currentSize==='43' ? '4.3 إنش' : '5.3 إنش';
-    const variant = `مقاس الخبزة: ${sizeText} - الوزن: ${currentWeight} غرام`;
+    const variantLines = [`مقاس الخبزة: ${sizeText} - الوزن: ${currentWeight} غرام`];
+    if(selectedCombo){
+      price += 7;
+      variantLines.push('مع كولا وبطاطا (+7₪)');
+    }
+    selectedAddons.forEach(i=>{
+      const a = ADDONS[currentCatKey][i];
+      price += a.price;
+      variantLines.push(`${a.label} (+${a.price}₪)`);
+    });
+    const variant = variantLines.join('\n');
     const catLabel = currentCatKey==='beef' ? 'بيف' : (currentCatKey==='chicken' ? 'تشكن' : '');
     const displayName = catLabel ? `${it.name} (${catLabel})` : it.name;
     addToCart(displayName, variant, price, currentQty);
@@ -848,7 +896,7 @@ function renderCart(){
     <div class="cart-row">
       <div class="cart-row-info">
         <div class="cart-row-name">${c.name}</div>
-        ${c.variant ? `<div class="cart-row-variant">${c.variant}</div>` : ''}
+        ${c.variant ? `<div class="cart-row-variant">${c.variant.replace(/\n/g,'<br>')}</div>` : ''}
         <div class="cart-row-price">${c.price*c.qty}₪</div>
         <div class="cart-remove" onclick="removeCartItem(${idx})">حذف</div>
       </div>
@@ -875,15 +923,19 @@ function confirmOrder(){
   const isDine = orderType==='dine';
   const tableVal = isDine ? (document.getElementById('tableNumberInput')?.value.trim() || '-') : '';
   const nameVal = !isDine ? (document.getElementById('customerNameInput')?.value.trim() || '-') : '';
+  const notesVal = document.getElementById('orderNotesInput')?.value.trim() || '';
 
   const divider = '------------------------';
-  const itemLines = cart.map((c,i)=>
-    `${i+1}) ${c.name}${c.variant?`\n   ${c.variant}`:''}\n   الكمية: ${c.qty} × ${c.price}₪ = ${c.price*c.qty}₪`
-  ).join('\n\n');
+  const itemLines = cart.map((c,i)=>{
+    const variantText = c.variant ? c.variant.split('\n').map(l=>`   ${l}`).join('\n') : '';
+    return `${i+1}) ${c.name}${variantText?`\n${variantText}`:''}\n   الكمية: ${c.qty} × ${c.price}₪ = ${c.price*c.qty}₪`;
+  }).join('\n\n');
 
   const orderTypeBlock = isDine
     ? `نوع الطلب: من المطعم\nرقم الطاولة: ${tableVal}`
     : `نوع الطلب: سفري (تيك أواي)\nالاسم: ${nameVal}`;
+
+  const notesBlock = notesVal ? `\n${divider}\nملاحظات: ${notesVal}` : '';
 
   const msgText =
 `طلب جديد - هالك برجر
@@ -895,7 +947,7 @@ ${divider}
 ${itemLines}
 
 ${divider}
-المجموع الكلي: ${cartTotal()}₪
+المجموع الكلي: ${cartTotal()}₪${notesBlock}
 ${divider}
 شكراً لطلبكم من هالك برجر`;
 
